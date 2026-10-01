@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 from typing import Any, Iterator
 
@@ -11,10 +12,10 @@ class TelegramError(RuntimeError):
 
 
 class TelegramClient:
-    def __init__(self, token: str, timeout: int = 30) -> None:
+    def __init__(self, token: str, timeout: int = 30, api_url: str = "https://api.telegram.org") -> None:
         if not token:
             raise ValueError("Telegram token is empty")
-        self._base = f"https://api.telegram.org/bot{token}"
+        self._base = f"{api_url.rstrip('/')}/bot{token}"
         self._timeout = timeout
 
     def _call(self, method: str, payload: dict[str, Any]) -> Any:
@@ -24,8 +25,18 @@ class TelegramClient:
             headers={"content-type": "application/json"},
         )
         # Long polling holds the connection for `timeout` seconds, so allow some slack.
-        with urllib.request.urlopen(req, timeout=self._timeout + 10) as resp:
-            body = json.load(resp)
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout + 10) as resp:
+                body = json.load(resp)
+        except urllib.error.HTTPError as exc:
+            # Telegram reports API errors (blocked bot, bad chat id, ...) as 4xx with a JSON description.
+            try:
+                description = json.load(exc).get("description", exc.reason)
+            except (ValueError, AttributeError):
+                description = exc.reason
+            finally:
+                exc.close()
+            raise TelegramError(f"{exc.code}: {description}") from exc
         if not body.get("ok"):
             raise TelegramError(body.get("description", "unknown Telegram error"))
         return body["result"]

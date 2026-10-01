@@ -36,9 +36,12 @@ On Windows PowerShell: `$env:TELEGRAM_BOT_TOKEN = "123456:ABC..."`.
 python -m unittest discover -s tests -t . -v
 ```
 
-The conversation logic (`leadbot/core.py`) has no network code, so the full dialog is tested without a Telegram token: happy path, validation errors, RU locale, cancel, per-chat isolation and SQL-injection-looking input.
+Two layers are tested, neither needs a real Telegram token:
 
-> The HTTP layer (`leadbot/telegram_api.py`) is a thin wrapper over the Bot API and is not covered by automated tests; it has to be verified manually with a real bot token.
+- **Conversation logic** (`leadbot/core.py`): happy path, validation errors, RU locale, cancel, per-chat isolation and SQL-injection-looking input.
+- **HTTP client** (`leadbot/telegram_api.py`): tested against a fake Telegram server on localhost: sending messages, API error responses, offset handling in long polling, and a complete dialog from `/start` to a saved lead through the real HTTP code path.
+
+> Not covered: behavior against the real Telegram servers (rate limits, network drops). Do one manual run with a real bot token before using it in production.
 
 ## Structure
 
@@ -47,7 +50,8 @@ leadbot/core.py          conversation state machine, validation, SQLite store
 leadbot/telegram_api.py  Bot API client (urllib, long polling)
 leadbot/bot.py           entry point and update loop
 leadbot/export.py        CSV export
-tests/test_core.py       unit tests
+tests/test_core.py       conversation, validation, storage and export tests
+tests/test_telegram_api.py  HTTP client tests against a fake Telegram server
 ```
 
 ## Possible next steps
